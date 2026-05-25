@@ -8043,6 +8043,27 @@ fails, attempts to require sym's namespace and retries."
   (intern (create-ns (symbol (namespace sym)))
           (symbol (name sym))))
 
+(defn- merge-data-reader-mappings [mappings new-mappings src]
+  (when (not (map? new-mappings))
+    (throw (ex-info (str "Not a valid data-reader map")
+                    {:url src})))
+  (reduce
+   (fn [m [k v]]
+     (when (not (symbol? k))
+       (throw (ex-info (str "Invalid form in data-reader file")
+                       {:url src
+                        :form k})))
+     (let [v-var (data-reader-var v)]
+       (when (and (contains? mappings k)
+                  (not= (mappings k) v-var))
+         (throw (ex-info "Conflicting data-reader mapping"
+                         {:url src
+                          :conflict k
+                          :mappings m})))
+       (assoc m k v-var)))
+   mappings
+   new-mappings))
+
 (defn- load-data-reader-file [mappings ^java.net.URL url]
   (with-open [rdr (clojure.lang.LineNumberingPushbackReader.
                    (java.io.InputStreamReader.
@@ -8052,25 +8073,16 @@ fails, attempts to require sym's namespace and retries."
                         {:eof nil :read-cond :allow}
                         {:eof nil})
             new-mappings (read read-opts rdr)]
-        (when (not (map? new-mappings))
-          (throw (ex-info (str "Not a valid data-reader map")
-                          {:url url})))
-        (reduce
-         (fn [m [k v]]
-           (when (not (symbol? k))
-             (throw (ex-info (str "Invalid form in data-reader file")
-                             {:url url
-                              :form k})))
-           (let [v-var (data-reader-var v)]
-             (when (and (contains? mappings k)
-                        (not= (mappings k) v-var))
-               (throw (ex-info "Conflicting data-reader mapping"
-                               {:url url
-                                :conflict k
-                                :mappings m})))
-             (assoc m k v-var)))
-         mappings
-         new-mappings)))))
+        (merge-data-reader-mappings mappings new-mappings url)))))
+
+(defn- load-data-readers-from-stream [mappings ^java.io.InputStream stream]
+  ;; Used on platforms (e.g. Android) where data_readers.clj is supplied as a
+  ;; stream by DynamicClassLoader.getDataReadersStream rather than a classpath URL.
+  (with-open [rdr (clojure.lang.LineNumberingPushbackReader.
+                   (java.io.InputStreamReader. stream "UTF-8"))]
+    (binding [*file* "data_readers.clj"]
+      (let [new-mappings (read {:eof nil :read-cond :allow} rdr)]
+        (merge-data-reader-mappings mappings new-mappings "data_readers.clj")))))
 
 (defn- load-data-readers []
   (alter-var-root #'*data-readers*
@@ -8079,7 +8091,7 @@ fails, attempts to require sym's namespace and retries."
                       (if-let [stream (when (instance? clojure.lang.DynamicClassLoader cl)
                                         (.getDataReadersStream
                                           ^clojure.lang.DynamicClassLoader cl))]
-                        (load-data-reader-file mappings stream)
+                        (load-data-readers-from-stream mappings stream)
                         (reduce load-data-reader-file
                                 mappings (data-reader-urls)))))))
 
