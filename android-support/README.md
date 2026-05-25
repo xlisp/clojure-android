@@ -10,10 +10,14 @@ Maven build. The main repo only gained the *hooks* it plugs into:
 |---|---|
 | `src/jvm/clojure/lang/DynamicClassLoader.java` | `defineClass` now delegates to the overridable `defineMissingClass`; added `getDataReadersStream()`. Defaults are unchanged for the JVM. |
 | `src/jvm/clojure/lang/RT.java` | Added `VM_TYPE` Var; `makeClassLoader()` reflectively builds `DalvikDynamicClassLoader` when `java.vm.name == "Dalvik"`, falling back to the plain loader. |
-| `src/clj/clojure/core.clj` | `load-data-readers` asks the context loader for a `data_readers.clj` stream first, then falls back to classpath enumeration. |
+| `src/clj/clojure/core.clj` | `load-data-readers` reads a `data_readers.clj` *stream* from the context loader (`load-data-readers-from-stream`, sharing `merge-data-reader-mappings` with the URL path) before falling back to classpath enumeration. |
+| `src/jvm/clojure/lang/Reflector.java` | `<clinit>` no longer rethrows when `AccessibleObject.canAccess` is absent (Android/Dalvik has no such Java-9 API); it falls back to the pre-JDK9 "accessible" behavior instead of failing class init. |
 
-Those three changes are transparent and zero-overhead on the JVM; the Dalvik
-branch only activates when `java.vm.name == "Dalvik"`.
+Those changes are transparent and zero-overhead on the JVM; the Dalvik-specific
+branches only activate when `java.vm.name == "Dalvik"` (or, for `Reflector`, only
+when the `canAccess` lookup actually fails — which never happens on a compliant
+JDK 9+). Verified on an API 36 emulator: boot, AOT calls, and on-device `eval`
+(JVM bytecode → d8 → DEX) all work.
 
 ## Contents
 
@@ -58,8 +62,11 @@ will load it.
 
 ## Note on the data-readers stream path
 
-`core.clj`'s `load-data-reader-file` is typed `^java.net.URL`. On the JVM the
-stream branch is never taken (`getDataReadersStream()` returns `null`), so the
-build is unaffected. If you rely on `assets/data_readers.clj` on Android and hit
-a type error there, adapt `load-data-reader-file` to also accept an
-`InputStream`, or wrap the asset in a `jar:`/`file:` URL before handing it back.
+`load-data-readers` has a dedicated stream path (`load-data-readers-from-stream`)
+for the `InputStream` returned by `getDataReadersStream()`, separate from the
+URL-based `load-data-reader-file`; both share `merge-data-reader-mappings`. (An
+earlier revision fed the stream straight to the `^java.net.URL`-typed
+`load-data-reader-file`, which threw `ClassCastException:
+AssetManager$AssetInputStream cannot be cast to java.net.URL` during `RT` init on
+Android — fixed.) On the JVM the stream branch is never taken, so behavior is
+unchanged.
