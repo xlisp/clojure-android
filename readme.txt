@@ -7,6 +7,23 @@
  * 	 the terms of this license.
  *   You must not remove this notice, or any other, from this software.
 
+==========================================================================
+Android support (this fork)
+--------------------------------------------------------------------------
+This fork's main purpose is to run Clojure 1.13 on Android (Dalvik / ART),
+including on-device eval (JVM bytecode -> d8 -> DEX). The runtime changes
+(DynamicClassLoader hook, RT.VM_TYPE, load-data-readers stream path, and a
+Reflector guard for Android's missing AccessibleObject.canAccess) are
+transparent and zero-overhead on the JVM.
+
+  - For the design, the change list, and the Android module, see:
+        android-support/README.md
+  - To build the jar without Maven/Ant (used by the Android demo):
+        ./build-jar.sh        # -> clojure-1.13.0-master-SNAPSHOT.jar
+  - A runnable Android demo lives in the sibling project:
+        ../clojure-android-demo
+==========================================================================
+
 Docs: https://clojure.org
 Feedback: https://ask.clojure.org
 Getting Started: https://clojure.org/guides/getting_started
