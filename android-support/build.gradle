@@ -1,0 +1,33 @@
+// Supplementary Android module for Clojure >= 1.13.
+//
+// Builds clojure.lang.DalvikDynamicClassLoader, which subclasses the concrete
+// clojure.lang.DynamicClassLoader from the main Clojure jar and overrides the
+// defineMissingClass / getDataReadersStream hooks. It depends on android.* and
+// the d8/r8 translator, so it deliberately lives OUTSIDE the main jar's src/jvm
+// tree and is compiled here, against the main jar as compileOnly.
+//
+// Default loader = the d8 + InMemoryDexClassLoader variant (requires minSdk 26).
+// For the legacy dx variant, see DalvikDynamicClassLoader_dx_legacy.java.alt.
+
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'clojure.lang.android'
+    compileSdkVersion 34
+    defaultConfig {
+        minSdkVersion 26   // d8 + InMemoryDexClassLoader variant requires API >= 26
+    }
+}
+
+dependencies {
+    // The jar produced by the main repo build (step A). Place it under libs/.
+    compileOnly files('libs/clojure-1.13.0-master-SNAPSHOT.jar')
+
+    // d8/r8 translator used by the recommended modern loader.
+    implementation 'com.android.tools:r8:8.2.47'
+
+    // If you switch to the legacy dx variant instead, use:
+    // implementation 'com.android.tools:dx:1.16'
+}
