@@ -8075,8 +8075,13 @@ fails, attempts to require sym's namespace and retries."
 (defn- load-data-readers []
   (alter-var-root #'*data-readers*
                   (fn [mappings]
-                    (reduce load-data-reader-file
-                            mappings (data-reader-urls)))))
+                    (let [cl (.getContextClassLoader (Thread/currentThread))]
+                      (if-let [stream (when (instance? clojure.lang.DynamicClassLoader cl)
+                                        (.getDataReadersStream
+                                          ^clojure.lang.DynamicClassLoader cl))]
+                        (load-data-reader-file mappings stream)
+                        (reduce load-data-reader-file
+                                mappings (data-reader-urls)))))))
 
 (try
  (load-data-readers)

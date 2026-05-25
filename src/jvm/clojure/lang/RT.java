@@ -22,6 +22,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.io.*;
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.IllegalArgumentException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -209,6 +210,12 @@ static Keyword COLUMN_KEY = Keyword.intern(null, "column");
 static Keyword FILE_KEY = Keyword.intern(null, "file");
 static Keyword DECLARED_KEY = Keyword.intern(null, "declared");
 static Keyword DOC_KEY = Keyword.intern(null, "doc");
+static Keyword DALVIK_VM = Keyword.intern(null, "dalvik-vm");
+static Keyword JAVA_VM   = Keyword.intern(null, "java-vm");
+final static public Var VM_TYPE =
+		Var.intern(CLOJURE_NS, Symbol.intern("vm-type"),
+		           "Dalvik".equals(System.getProperty("java.vm.name"))
+		             ? DALVIK_VM : JAVA_VM);
 final static public Var USE_CONTEXT_CLASSLOADER =
 		Var.intern(CLOJURE_NS, Symbol.intern("*use-context-classloader*"), T).setDynamic();
 //boolean
@@ -2184,7 +2191,22 @@ static public ClassLoader makeClassLoader(){
             try{
             Var.pushThreadBindings(RT.map(USE_CONTEXT_CLASSLOADER, RT.T));
 //			getRootClassLoader();
-			return new DynamicClassLoader(baseLoader());
+            if(VM_TYPE.deref() == DALVIK_VM) {
+                try {
+                    final Class<?> loaderClass =
+                        Class.forName("clojure.lang.DalvikDynamicClassLoader");
+                    final Constructor<?> constructor =
+                        loaderClass.getConstructor(ClassLoader.class);
+                    return constructor.newInstance(baseLoader());
+                } catch(Exception e) {
+                    // Fallback: a plain DynamicClassLoader can at least finish
+                    // static init; it only fails on the first defineClass, which
+                    // is friendlier than a NoClassDefFoundError up front.
+                    return new DynamicClassLoader(baseLoader());
+                }
+            } else {
+                return new DynamicClassLoader(baseLoader());
+            }
             }
                 finally{
             Var.popThreadBindings();

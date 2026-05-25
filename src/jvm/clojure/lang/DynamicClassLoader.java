@@ -20,6 +20,7 @@ import java.net.URLClassLoader;
 import java.net.URL;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
+import java.io.InputStream;
 
 public class DynamicClassLoader extends URLClassLoader{
 HashMap<Integer, Object[]> constantVals = new HashMap<Integer, Object[]>();
@@ -41,11 +42,29 @@ public DynamicClassLoader(ClassLoader parent){
 	super(EMPTY_URLS,parent);
 }
 
+/**
+ * Entry point used by Clojure's Compiler to define a class from JVM bytecode.
+ * The bytecode-to-class step is delegated to defineMissingClass so that
+ * platform-specific subclasses (e.g. DalvikDynamicClassLoader on Android)
+ * can translate JVM bytecode to DEX before loading.
+ */
 public Class defineClass(String name, byte[] bytes, Object srcForm){
 	Util.clearCache(rq, classCache);
-	Class c = defineClass(name, bytes, 0, bytes.length);
+	Class c = defineMissingClass(name, bytes, srcForm);
     classCache.put(name, new SoftReference(c,rq));
     return c;
+}
+
+/**
+ * Hook for subclasses to provide a platform-specific way of turning JVM
+ * bytecode into a loaded Class. The default uses ClassLoader.defineClass
+ * which is what standard JVMs require. Android subclasses override this
+ * to translate the bytecode to DEX first.
+ *
+ * @since 1.13
+ */
+protected Class<?> defineMissingClass(String name, byte[] bytes, Object srcForm){
+    return defineClass(name, bytes, 0, bytes.length);
 }
 
 static Class<?> findInMemoryClass(String name) {
@@ -91,6 +110,17 @@ public Object[] getConstants(int id){
 
 public void addURL(URL url){
 	super.addURL(url);
+}
+
+/**
+ * Hook for subclasses to supply data_readers.clj from a platform-specific
+ * place (e.g. Android assets). Default returns null so the standard
+ * classpath enumeration path is used.
+ *
+ * @since 1.13
+ */
+public InputStream getDataReadersStream() {
+    return null;
 }
 
 }
