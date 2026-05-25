@@ -38,7 +38,12 @@ static {
 		if (! isJava8())
 			pred = MethodHandles.lookup().findVirtual(Method.class, "canAccess", MethodType.methodType(boolean.class, Object.class));
 	} catch (Throwable t) {
-		Util.sneakyThrow(t);
+		// Non-standard VMs (e.g. Android/Dalvik) report a non-"1.8" spec version
+		// but don't implement java.lang.reflect.AccessibleObject.canAccess. Rather
+		// than failing class init, fall back to the pre-JDK9 behavior (treat
+		// members as accessible). On a compliant JDK9+ the lookup above succeeds,
+		// so this branch is never taken there.
+		pred = null;
 	}
 	CAN_ACCESS_PRED = pred;
 }
